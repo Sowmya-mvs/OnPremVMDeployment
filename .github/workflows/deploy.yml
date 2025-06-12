@@ -1,0 +1,38 @@
+name: Deploy to On-Prem VM
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build-and-deploy:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Publish .NET App
+      run: dotnet publish -c Release -o ./publish
+
+    - name: Deploy via WinRM
+      uses: microsoft/psremotetarget@v1.1
+      with:
+        target_host: ${{ secrets.VM_IP }}
+        target_username: ${{ secrets.VM_USER }}
+        target_password: ${{ secrets.VM_PASSWORD }}
+        run_as_admin: true
+        script: |
+          $destination = "C:\inetpub\wwwroot\SampleWebApp"
+          if (!(Test-Path $destination)) {
+            New-Item -ItemType Directory -Path $destination
+          }
+          Remove-Item "$destination\*" -Recurse -Force
+          Copy-Item -Path "${{ github.workspace }}\publish\*" -Destination $destination -Recurse
+          Restart-Service -Name 'W3SVC'
